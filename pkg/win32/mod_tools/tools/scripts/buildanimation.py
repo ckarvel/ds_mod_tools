@@ -7,14 +7,14 @@ import zipfile
 import math
 import os
 import sys
-import Image
+from PIL import Image
 from clint.textui import progress
-import ImageDraw
+from PIL import ImageDraw
 import optimizeimage
 import tempfile
 import re
 
-from StringIO import StringIO
+from io import StringIO, BytesIO
 from collections import namedtuple
 
 from klei import atlas, textureconverter
@@ -82,10 +82,11 @@ FACING_DOWNRIGHT = 1<<6
 FACING_DOWNLEFT = 1<<7
 
 def strhash(str, hashcollection):
+    str = str.decode('ascii')
     hash = 0
     for c in str:
         v = ord(c.lower())
-        hash = (v + (hash << 6) + (hash << 16) - hash) & 0xFFFFFFFFL
+        hash = (v + (hash << 6) + (hash << 16) - hash) & 0xFFFFFFFF
     hashcollection[hash] = str
     return hash
 
@@ -96,9 +97,9 @@ EXPORT_DEPTH = 10
 def ExportAnim(endianstring, xmlstr, outzip, ignore_exceptions):
     hashcollection = {}
     doc = xml.dom.minidom.parseString(xmlstr)
-    outfile = StringIO()
+    outfile = BytesIO()
 
-    outfile.write(struct.pack(endianstring +  'cccci', 'A', 'N', 'I', 'M', ANIMVERSION))
+    outfile.write(struct.pack(endianstring +  'cccci', b'A', b'N', b'I', b'M', ANIMVERSION))
     outfile.write(struct.pack(endianstring + 'I', len(doc.getElementsByTagName("element"))))
     outfile.write(struct.pack(endianstring + 'I', len(doc.getElementsByTagName("frame"))))
     outfile.write(struct.pack(endianstring + 'I', len(doc.getElementsByTagName("event"))))
@@ -106,20 +107,19 @@ def ExportAnim(endianstring, xmlstr, outzip, ignore_exceptions):
 
     def LocalExport( anim_node ):
         name = anim_node.attributes["name"].value.encode('ascii')
-        
-        dirs = (re.search("(.*)_up\Z", name),
-                re.search("(.*)_down\Z", name),
-                re.search("(.*)_side\Z", name),
-                re.search("(.*)_left\Z", name),
-                re.search("(.*)_right\Z", name),
-                re.search("(.*)_upside\Z", name),
-                re.search("(.*)_downside\Z", name),
-                re.search("(.*)_upleft\Z", name),
-                re.search("(.*)_upright\Z", name),
-                re.search("(.*)_downleft\Z", name),
-                re.search("(.*)_downright\Z", name),
-                re.search("(.*)_45s\Z", name),
-                re.search("(.*)_90s\Z", name))
+        dirs = (re.search(b"(.*)_up\Z", name),
+                re.search(b"(.*)_down\Z", name),
+                re.search(b"(.*)_side\Z", name),
+                re.search(b"(.*)_left\Z", name),
+                re.search(b"(.*)_right\Z", name),
+                re.search(b"(.*)_upside\Z", name),
+                re.search(b"(.*)_downside\Z", name),
+                re.search(b"(.*)_upleft\Z", name),
+                re.search(b"(.*)_upright\Z", name),
+                re.search(b"(.*)_downleft\Z", name),
+                re.search(b"(.*)_downright\Z", name),
+                re.search(b"(.*)_45s\Z", name),
+                re.search(b"(.*)_90s\Z", name))
         
         facingbyte = FACING_RIGHT | FACING_LEFT | FACING_UP | FACING_DOWN | FACING_UPLEFT | FACING_UPRIGHT | FACING_DOWNLEFT | FACING_DOWNRIGHT
         
@@ -196,9 +196,9 @@ def ExportAnim(endianstring, xmlstr, outzip, ignore_exceptions):
             for element_node in elements:
                 outfile.write(struct.pack(endianstring + 'I', strhash(element_node.attributes["name"].value.encode('ascii'), hashcollection)))
                 outfile.write(struct.pack(endianstring + 'I', int(element_node.attributes["frame"].value)))
-                layername = element_node.attributes["layername"].value.encode('ascii').split('/')[-1]
+                layername = element_node.attributes["layername"].value.split('/')[-1].encode('ascii')
                 outfile.write(struct.pack(endianstring + 'I', strhash(layername, hashcollection)))
-                        
+
                 z = (eidx/float(num_elements)) * float(EXPORT_DEPTH) - EXPORT_DEPTH*.5
                 outfile.write(struct.pack(endianstring + 'fffffff',
                     float(element_node.attributes["m_a"].value),
@@ -221,9 +221,9 @@ def ExportAnim(endianstring, xmlstr, outzip, ignore_exceptions):
 
     #write out a lookup table of the pre-hashed strings
     outfile.write(struct.pack(endianstring + 'I', len(hashcollection)))
-    for hash_idx,name in hashcollection.iteritems():
+    for hash_idx,name in hashcollection.items():
         outfile.write(struct.pack(endianstring + 'I', hash_idx))
-        outfile.write(struct.pack(endianstring + 'i' + str(len(name)) + 's', len(name), name))
+        outfile.write(struct.pack(endianstring + 'i' + str(len(name)) + 's', len(name), name.encode('ascii')))
 
     info = zipfile.ZipInfo( "anim.bin", date_time=ZIP_ZERO_TIME )
     info.compress_type = zipfile.ZIP_DEFLATED
@@ -252,7 +252,7 @@ def AtlasImages(ims, outname, outzip, maxtexturesize=2048, antialias=True, platf
         try:
             #convert all of the result images to the game format, and save them to the zip file
 
-            for idx, atlasdata in atlases.items():
+            for idx, atlasdata in list(atlases.items()):
                 tex_filename = atlasdata.mips[0].name + ".tex"
                 dest_filename = os.path.join( temp_dir, tex_filename )
 
@@ -277,7 +277,7 @@ def AtlasImages(ims, outname, outzip, maxtexturesize=2048, antialias=True, platf
 					
                     mip_img = mip_img.resize( (int(math.ceil(width)), int(math.ceil(height))), filter_func )
 
-                    with file( mip_filename, "wb" ) as src_file:
+                    with open( mip_filename, "wb" ) as src_file:
                         valid_filenames.append( mip_filename )
                         mip_img.save( src_file, format="PNG" )
                         src_file.close()
@@ -390,8 +390,9 @@ def ExportBuild(endianstring, inzip, buildxml, outzip, antialias, platform, text
     images = []
 
     for imname in imnames:
-        img = Image.open( StringIO( inzip.read( imname + ".png" ) ) )
-        img.name = imname
+        imgname = imname.decode('ascii') + ".png"
+        img = Image.open(BytesIO(inzip.read(imgname)))
+        img.name = imgname
         img.regions = optimizeimage.GetImageRegions(img, 32)
 
         images.append( img )
@@ -401,9 +402,9 @@ def ExportBuild(endianstring, inzip, buildxml, outzip, antialias, platform, text
     opaqueverts = []
     alphaverts = []
 
-    outfile = StringIO()
+    outfile = BytesIO()
 
-    outfile.write(struct.pack(endianstring +  'cccci', 'B', 'I', 'L', 'D', BUILDVERSION))
+    outfile.write(struct.pack(endianstring +  'cccci', b'B', b'I', b'L', b'D', BUILDVERSION))
 
     outfile.write(struct.pack(endianstring + 'I', len(doc.getElementsByTagName("Symbol"))))
     outfile.write(struct.pack(endianstring + 'I', len(doc.getElementsByTagName("Frame"))))
@@ -419,7 +420,7 @@ def ExportBuild(endianstring, inzip, buildxml, outzip, antialias, platform, text
         mip = atlasdata.mips[0]
         name = mip.name + ".tex"
 
-        outfile.write(struct.pack(endianstring + 'i' + str(len(name)) + 's', len(name), name))
+        outfile.write(struct.pack(endianstring + 'i' + str(len(name)) + 's', len(name), name.encode('ascii')))
 
     symbol_nodes = sorted(doc.getElementsByTagName("Symbol"), key=lambda x: strhash(x.attributes["name"].value.encode('ascii'), hashcollection))
 
@@ -467,9 +468,9 @@ def ExportBuild(endianstring, inzip, buildxml, outzip, antialias, platform, text
     
     #write out a lookup table of the pre-hashed strings
     outfile.write(struct.pack(endianstring + 'I', len(hashcollection)))
-    for hash_idx,name in hashcollection.iteritems():
+    for hash_idx,name in hashcollection.items():
         outfile.write(struct.pack(endianstring + 'I', hash_idx))
-        outfile.write(struct.pack(endianstring + 'i' + str(len(name)) + 's', len(name), name))
+        outfile.write(struct.pack(endianstring + 'i' + str(len(name)) + 's', len(name), name.encode('ascii')))
 
     info = zipfile.ZipInfo( "build.bin", date_time=ZIP_ZERO_TIME )
     info.compress_type = zipfile.ZIP_DEFLATED
@@ -511,13 +512,13 @@ if __name__ == "__main__":
 
         if ext != ".zip":
             sys.stderr.write( "I only accept zip files, and you tried to make me process " + results.infile + "\n" )
-            raw_input("Press ENTER to exit")
+            input("Press ENTER to exit")
             sys.exit()
 
         data_path = os.path.abspath(os.path.join(path, "..", results.outputdir))
         zip_file = zipfile.ZipFile(results.infile, "r")
 
-        outbuff = StringIO()
+        outbuff = BytesIO()
         outzip = zipfile.ZipFile(outbuff, mode='w')
 
         if "animation.xml" in zip_file.namelist():
@@ -552,7 +553,7 @@ if __name__ == "__main__":
                 pass
     except: # catch *all* exceptions
         e = sys.exc_info()[1]
-        sys.stderr.write( "Error Exporting {}\n".format(results.infile) + str(e) )
+        sys.stderr.write( "\n\nError Exporting {}\n".format(results.infile) + str(e) + "\n\n")
         traceback.print_exc(file=sys.stderr)
         if not results.ignoreexceptions:
             #raw_input("There was an export error!\n") # uncomment this to stop the execution when this breaks

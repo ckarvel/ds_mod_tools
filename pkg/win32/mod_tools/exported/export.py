@@ -25,7 +25,7 @@ class Prefabs:
     def GetAssetType( self, asset_type ):
         asset_type = asset_type.upper()
         assets = []
-        
+
         for prefab in self.Prefabs:
             for asset in prefab.Assets:
                 if asset.Type == asset_type:
@@ -51,7 +51,7 @@ class Prefabs:
                 if os.path.basename( asset.File ) == asset_filename:
                     return prefab
         return None
-        
+
 
 def ConvertAnim(params):
     anim, prefabs, args = params
@@ -73,11 +73,12 @@ def ConvertAnim(params):
 
     additional_options = ExportOptions.Options.get( anim_name, [] )
     cmd_args = [
-        os.path.join( SCRIPT_DIR, r"..\buildtools\windows\python27\python.exe" ),
+        r"python",
         os.path.join( SCRIPT_DIR, r"..\tools\scripts\buildanimation.py" ),
+
         "--scale=" + str( scale )
     ]
-    
+
     additional_args = ( 'platform', 'textureformat', 'hardalphatextureformat' )
     for arg in additional_args:
         try:
@@ -97,7 +98,7 @@ def ConvertAnim(params):
 
     os.chdir( SCRIPT_DIR )
 
-    src_file = anim_path    
+    src_file = anim_path
     anim_dir = os.path.normpath( os.path.join("..", args.outputdir, "anim"))
     if not os.path.exists(anim_dir):
         os.makedirs(anim_dir)

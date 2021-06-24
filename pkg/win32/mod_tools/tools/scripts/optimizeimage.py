@@ -1,6 +1,6 @@
 import argparse
 from collections import namedtuple
-import Image, ImageDraw
+from PIL import Image, ImageDraw
 import sys
 
 BBox = namedtuple("Bbox", 'x y w h')
@@ -28,8 +28,8 @@ def Analyze(im, bbox):
 	numopaque = 0
 
 	pixels = im.load()
-	for y in range(bbox.y, bbox.y + bbox.h):
-		for x in range(bbox.x, bbox.x + bbox.w):
+	for y in range(int(bbox.y), int(bbox.y + bbox.h)):
+		for x in range(int(bbox.x), int(bbox.x + bbox.w)):
 			p = pixels[x,y]
 			if p[3] == 0:
 				numblank += 1
@@ -105,7 +105,7 @@ class QuadTreeNode:
 			return "\t"*self.depth + "->\n" + "\n".join(l)
 
 	def printme(self):
-		print "\t"*self.depth+ BlockName(self.type) + " " +  str(self.bbox)
+		print("\t"*self.depth+ BlockName(self.type) + " " +  str(self.bbox))
 		if self.children:
 			for child in self.children:
 				child.printme()

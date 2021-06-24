@@ -6,6 +6,7 @@ by ckarvel (aka amoryleaf):
 -Installed Pillow using easy_install for PIL for py3 compatibility
 -used 2to3.py to convert to py3 in klei and client
 note: hardcoded some of my paths (so lazy...)
+note: Used my own python exe by hardcoding value for "cached_python_path" in modtoolib/modtool.cpp (not committed)
 ```
 
 
