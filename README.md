@@ -1,5 +1,13 @@
 ds_mod_tools
 ============
+```
+by ckarvel (aka amoryleaf):
+-converted to Python3
+-Installed Pillow using easy_install for PIL for py3 compatibility
+-used 2to3.py to convert to py3 in klei and client
+note: hardcoded some of my paths (so lazy...)
+```
+
 
 This is a fork from the source code for the 'Don't Starve Mod Tools' available on Steam Workshop.
 
