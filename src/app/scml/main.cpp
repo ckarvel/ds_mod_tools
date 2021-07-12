@@ -20,8 +20,9 @@ using namespace Compat;
 #define IN
 #define OUT
 #define MAX_NAME_LENGTH 256
-#define FRAME_RATE 40
-
+#define FRAME_RATE 30
+#define FRAME_COUNT 33 // 1000/FRAME_RATE = 33.33
+std::ofstream g_log_file;
 
 //#define ANIMDEBUG 1
 
@@ -658,15 +659,48 @@ void convert_timeline_to_frames(
 
 	bool should_export = true;
 
+	// ok so if this timeline id (ex. hand_2) doesn't have any key frames at all, don't export
+	// OR
+	// if not forcing export AND this object's first appearance is in a later frame, don't export
+	// id, frame, time[0], keycount
+
 	if(key_count <= 0 || (!forceexport.count( make_pair(timeline_id, 0) ) && times[0] > frame_num)) {
+		/*if (key_count <= 0)
+		{
+			g_log_file << "no export: [" <<  timeline_id << "," << frame_num << "] -> key_count <= 0\n";
+		}
+		else if (times[0] > frame_num)
+		{
+			g_log_file << "no export: [" <<  timeline_id << "," << frame_num << "] -> first frame = " << times[0] << endl;
+		}*/
 		should_export = false;
 	}
-	else if(!forceexport.count( make_pair(timeline_id, key_count - 1) ) && times[key_count - 1] + 1000/FRAME_RATE < frame_num) {
+	else if(!forceexport.count( make_pair(timeline_id, key_count - 1) ) && times[key_count - 1] + FRAME_COUNT < frame_num) {
 		should_export = looping;
+		//g_log_file << (looping ? "" : "no ") << "export: [" <<  timeline_id << "," << frame_num << "] -> last frame = " << times[key_count - 1] + FRAME_COUNT << endl;
+	}
+
+	bool in_frame = false;
+	for (int i = 0; i < key_count - 1; i++) {
+		if (times[i] == frame_num) {
+			in_frame = true;
+			break;
+		}
+	}
+
+	g_log_file << "[" << frame_num << "," << timeline_id << "," << key_count << "] " << (should_export ? "" : "no ") << endl;
+	g_log_file << "    keys:\n";
+	for (int i = 0; i < key_count; i++) {
+		g_log_file << "    " << times[i] << endl;
+	}
+	if (!in_frame)
+	{
+		should_export = false;
+		g_log_file << "overwriting to 'no' frame/id: " << frame_num << "/" << timeline_id << endl;
 	}
 
 	if(!should_export) {
-		frame_alpha = 0;
+		frame_alpha = 0; // this sets the alpha to 0 which is aka for "not exporting".
 		return;
 	}
 
@@ -715,7 +749,8 @@ void convert_timeline_to_frames(
 }
 
 void convert_anim_timelines_to_frames(
-    IN  int     length,
+	IN  char*  anim_name,
+  IN  int     length,
 	IN  bool	looping,
 	IN	const	std::set< std::pair<int, int> >& timeline_key_forceexport,
     IN  int     timeline_count,
@@ -755,9 +790,11 @@ void convert_anim_timelines_to_frames(
     )
 {
     int frame_index = 0;
-    for(int frame_num = 0; frame_num < length; frame_num+=1000/FRAME_RATE)
-    {
-		frame_element_start_indices[frame_index] = element_index;
+		for (int frame_num = 0, _idx = -1; frame_num < length; frame_num += FRAME_COUNT, _idx++)
+		{
+			if (_idx % 3 == 0) // 34, 33, 33, ... 34, 33, 33 ...
+				frame_num += 1;
+			frame_element_start_indices[frame_index] = element_index;
         for(int i = 0; i < timeline_count; ++i)
         {
             const int key_start_index = timeline_key_start_indices[i];
@@ -1775,14 +1812,14 @@ void import_animations(
 					loopings[anim_index]
                     );
                 ++anim_index;
-            }
+						}
         }
     }    
 }
 
 int get_anim_frame_count(int length)
 {
-	return 1 + (length - 1) / (1000/FRAME_RATE);
+	return 1 + (length - 1) / (FRAME_COUNT);
 }
 
 void get_anim_counts(
@@ -2247,9 +2284,13 @@ void build_scml(
 	int frame_element_count_index = 0;
     for(int i = 0; i < anim_count; ++i)
     {
+				g_log_file << "====================" << endl;
+				g_log_file << "converting animation: " << anim_names[i] << endl;
+				g_log_file << "====================" << endl;
         int timeline_start_index = anim_timeline_start_indices[i];
 		anim_frame_start_indices[i] = frame_element_count_index;
         convert_anim_timelines_to_frames(
+						anim_names[i],
             anim_lengths[i],
 			anim_loopings[i],
 			anim_timeline_key_forceexport[i],
@@ -2302,8 +2343,10 @@ void build_scml(
 		int* bone_key_start_indices = &anim_bone_key_start_indices[anim_bone_start_indices[anim_index]];
 		int* bone_key_counts = &anim_bone_key_counts[anim_bone_start_indices[anim_index]];
 		anim_bone_frame_start_indices[anim_index] = bone_frame_index;
-		for(int frame_num = 0; frame_num < anim_length; frame_num+=1000/FRAME_RATE)
+		for (int frame_num = 0, _idx = -1; frame_num < anim_length; frame_num += FRAME_COUNT, _idx++)
 		{
+			if (_idx % 3 == 0) // 34, 33, 33, ... 34, 33, 33 ...
+				frame_num += 1;
 			for(int bone_index = 0; bone_index < bone_count; ++bone_index)
 			{
 				bone* bone_keys = &anim_bone_keys[bone_key_start_indices[bone_index]];
@@ -2377,8 +2420,10 @@ void build_scml(
 		int anim_length = anim_lengths[anim_index];
 		int bone_count = anim_bone_counts[anim_index];
 		int frame_index = 0;
-		for(int frame_num = 0; frame_num < anim_length; frame_num+=1000/FRAME_RATE)
+		for(int frame_num = 0, _idx = -1; frame_num < anim_length; frame_num+=FRAME_COUNT, _idx++)
 		{
+			if (_idx % 3 == 0) // 34, 33, 33, ... 34, 33, 33 ...
+				frame_num += 1;
 			bone* bone_frames = &anim_bone_frames[anim_bone_frame_start_indices[anim_index] + frame_index * bone_count];
 			bone* flattened_bone_frames = &anim_flattened_bone_frames[anim_bone_frame_start_indices[anim_index]  + frame_index * bone_count];
 			for(int bone_index = 0; bone_index < bone_count; ++bone_index)
@@ -2409,7 +2454,7 @@ void build_scml(
             int* anim_frame_element_start_indices = &frame_element_start_indices[frame_start_index];
 
 			int bone_count = anim_bone_counts[anim_index];
-			for(int frame_index = 0; frame_index < anim_length/(1000/FRAME_RATE); ++frame_index)
+			for(int frame_index = 0; frame_index < anim_length/(FRAME_COUNT); ++frame_index)
 			{				
 				bone* bones = &anim_flattened_bone_frames[anim_bone_frame_start_indices[anim_index]  + frame_index * bone_count];
 				int element_start_index = anim_frame_element_start_indices[frame_index];
@@ -2527,7 +2572,7 @@ void build_scml(
                     IN animation_writer,
                     IN anim_names[i],
                     IN anim_roots[i],
-                    IN anim_lengths[i]/(1000/FRAME_RATE),
+                    IN anim_lengths[i]/(FRAME_COUNT),
                     IN anim_framerates[i],
                     IN &frame_indices[frame_start_index],
                     IN &frame_dimensions[frame_start_index],
@@ -2553,7 +2598,8 @@ void build_scml(
 }
 
 int main( int argument_count, char** arguments )
-{    
+{
+		g_log_file.open("D:\\ds_mod_tools\\debug.log");
     set_application_folder( arguments[0] );
     begin_log();
 
@@ -2660,6 +2706,8 @@ int main( int argument_count, char** arguments )
     run( command_line, true, "Building '%s'", output_package_file_path.basename().c_str() );
 
     end_log();
+
+		g_log_file.close();
 
 	return 0;
 }
